@@ -60,6 +60,26 @@ export function MarketplaceMap({ items, center = defaultCenter }: MarketplaceMap
   const mapRef = useRef<L.Map | null>(null);
   const navigate = useNavigate();
 
+  console.log('Received items:', items); // Debug log
+
+  // Filter valid items
+  const validItems = items.filter(item => {
+    const hasValidLocation = item.location 
+      && typeof item.location.lat === 'number' 
+      && typeof item.location.lng === 'number'
+      && !isNaN(item.location.lat) 
+      && !isNaN(item.location.lng)
+      && item.location.lat !== 0 
+      && item.location.lng !== 0;
+
+    if (!hasValidLocation) {
+      console.warn('Invalid location for item:', item);
+    }
+    return hasValidLocation;
+  });
+
+  console.log('Valid items:', validItems); // Debug log
+
   useEffect(() => {
     // Get user's location
     if ("geolocation" in navigator) {
@@ -69,53 +89,13 @@ export function MarketplaceMap({ items, center = defaultCenter }: MarketplaceMap
         },
         () => {
           // If geolocation fails and we have valid items, center on first item
-          if (items.length > 0) {
-            setMapCenter([items[0].location.lat, items[0].location.lng]);
+          if (validItems.length > 0) {
+            setMapCenter([validItems[0].location.lat, validItems[0].location.lng]);
           }
         }
       );
     }
-  }, [items]);
-
-  useEffect(() => {
-    if (!mapRef.current) return;
-
-    // Create markers for valid items
-    const validItems = items.filter(item => {
-      const hasValidLocation = item.location 
-        && typeof item.location.lat === 'number' 
-        && typeof item.location.lng === 'number'
-        && !isNaN(item.location.lat) 
-        && !isNaN(item.location.lng)
-        && item.location.lat !== 0 
-        && item.location.lng !== 0;
-
-      if (!hasValidLocation) {
-        console.warn('Invalid location for item:', item);
-      }
-      return hasValidLocation;
-    });
-
-    const map = mapRef.current;
-    const markers = useRef<L.LayerGroup>(new L.LayerGroup());
-
-    validItems.forEach(item => {
-      if (item.location?.lat && item.location?.lng) {
-        const marker = L.marker([item.location.lat, item.location.lng])
-          .bindPopup(`
-            <b>${item.title}</b><br/>
-            ${item.type === 'give' ? 'Giving Away' : 'Looking For'}<br/>
-            Price: ${item.price === 'free' ? 'Free' : `$${item.price}`}
-          `);
-        markers.current.addLayer(marker);
-        marker.addTo(map);
-      }
-    });
-
-    return () => {
-      markers.current.clearLayers();
-    };
-  }, [mapRef, items]);
+  }, [validItems]);
 
   return (
     <div className="h-[500px] rounded-lg overflow-hidden relative">
@@ -131,7 +111,7 @@ export function MarketplaceMap({ items, center = defaultCenter }: MarketplaceMap
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {items.length > 0 && items.map((item) => (
+        {validItems.length > 0 && validItems.map((item) => (
           <Marker
             key={item.id}
             position={[item.location.lat, item.location.lng]}
@@ -165,20 +145,20 @@ export function MarketplaceMap({ items, center = defaultCenter }: MarketplaceMap
         ))}
       </MapContainer>
 
-      {items.length > 0 && (
+      {validItems.length > 0 && (
         <button
           onClick={() => {
-            if (mapRef.current && items.length > 0) {
-              if (items.length === 1) {
+            if (mapRef.current && validItems.length > 0) {
+              if (validItems.length === 1) {
                 // For single item, center and zoom
                 mapRef.current.setView(
-                  [items[0].location.lat, items[0].location.lng],
+                  [validItems[0].location.lat, validItems[0].location.lng],
                   13
                 );
               } else {
                 // For multiple items, use bounds
                 const bounds = L.latLngBounds(
-                  items.map(item => [item.location.lat, item.location.lng])
+                  validItems.map(item => [item.location.lat, item.location.lng])
                 );
                 mapRef.current.fitBounds(bounds, { padding: [50, 50] });
               }
