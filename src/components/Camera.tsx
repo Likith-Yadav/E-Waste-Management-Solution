@@ -3,7 +3,7 @@ import Webcam from 'react-webcam';
 import * as tf from '@tensorflow/tfjs';
 import * as cocossd from '@tensorflow-models/coco-ssd';
 import { useWasteStore } from '../store/wasteStore';
-import { Camera as CaptureIcon, Loader2, Pause, Play } from 'lucide-react';
+import { Camera as CaptureIcon, Loader2, Pause, Play, FlipHorizontal } from 'lucide-react';
 
 export function Camera() {
   const webcamRef = useRef<Webcam>(null);
@@ -15,9 +15,26 @@ export function Camera() {
   const addDetection = useWasteStore((state) => state.addDetection);
   const detectInterval = useRef<number>();
   const clearDetections = useWasteStore((state) => state.clearDetections);
+  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
 
-  const WEBCAM_WIDTH = 640;
-  const WEBCAM_HEIGHT = 480;
+  const [dimensions, setDimensions] = useState({
+    width: Math.min(640, window.innerWidth - 32), // 32px for padding
+    height: Math.min(480, (window.innerWidth - 32) * 0.75) // maintain 4:3 aspect ratio
+  });
+
+  // Add resize handler
+  useEffect(() => {
+    const handleResize = () => {
+      const newWidth = Math.min(640, window.innerWidth - 32);
+      setDimensions({
+        width: newWidth,
+        height: newWidth * 0.75 // maintain 4:3 aspect ratio
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Load model on mount
   useEffect(() => {
@@ -74,8 +91,8 @@ export function Camera() {
                ));
       });
 
-      canvas.width = WEBCAM_WIDTH;
-      canvas.height = WEBCAM_HEIGHT;
+      canvas.width = dimensions.width;
+      canvas.height = dimensions.height;
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -170,8 +187,8 @@ export function Camera() {
                  ));
         });
 
-        canvas.width = WEBCAM_WIDTH;
-        canvas.height = WEBCAM_HEIGHT;
+        canvas.width = dimensions.width;
+        canvas.height = dimensions.height;
         
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
@@ -225,67 +242,78 @@ export function Camera() {
     }
   };
 
+  const toggleCamera = () => {
+    setFacingMode(current => current === "environment" ? "user" : "environment");
+  };
+
   return (
-    <div className="relative">
-      <Webcam
-        ref={webcamRef}
-        className="rounded-lg shadow-lg"
-        mirrored={false}
-        audio={false}
-        screenshotFormat="image/jpeg"
-        videoConstraints={{
-          width: WEBCAM_WIDTH,
-          height: WEBCAM_HEIGHT,
-          facingMode: "environment",
-          aspectRatio: 4/3
-        }}
+    <div className="relative w-full flex justify-center">
+      <div 
+        className="relative w-full max-w-[640px]"
         style={{
-          display: snapshot ? 'none' : 'block',
-          width: '100%',
-          height: 'auto'
+          aspectRatio: '4/3',
         }}
-      />
-      {snapshot && (
-        <img
-          src={snapshot}
-          alt="Captured waste"
-          className="rounded-lg shadow-lg w-full h-auto"
+      >
+        <Webcam
+          ref={webcamRef}
+          className="rounded-lg shadow-lg absolute top-0 left-0 w-full h-full object-cover"
+          mirrored={facingMode === "user"}
+          audio={false}
+          screenshotFormat="image/jpeg"
+          videoConstraints={{
+            width: dimensions.width,
+            height: dimensions.height,
+            facingMode: facingMode,
+            aspectRatio: 4/3
+          }}
+          style={{
+            display: snapshot ? 'none' : 'block',
+          }}
         />
-      )}
-      <canvas
-        ref={canvasRef}
-        className="absolute top-0 left-0 rounded-lg"
-        style={{
-          width: '100%',
-          height: 'auto'
-        }}
-      />
-      {isLoading ? (
-        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
-          <Loader2 className="w-8 h-8 animate-spin text-white" />
-          <span className="ml-2 text-white">Loading AI model...</span>
-        </div>
-      ) : (
-        <div className="absolute bottom-4 right-4 flex gap-2">
-          <button
-            onClick={toggleLiveMode}
-            className="p-3 bg-white rounded-full shadow-lg hover:bg-gray-100 transition-colors"
-          >
-            {isLive ? (
-              <Pause className="w-6 h-6 text-blue-500" />
-            ) : (
-              <Play className="w-6 h-6 text-green-500" />
-            )}
-          </button>
-          <button
-            onClick={captureImage}
-            className="p-3 bg-white rounded-full shadow-lg hover:bg-gray-100 transition-colors"
-            disabled={!isLive}
-          >
-            <CaptureIcon className="w-6 h-6 text-red-500" />
-          </button>
-        </div>
-      )}
+        {snapshot && (
+          <img
+            src={snapshot}
+            alt="Captured waste"
+            className="rounded-lg shadow-lg absolute top-0 left-0 w-full h-full object-cover"
+          />
+        )}
+        <canvas
+          ref={canvasRef}
+          className="absolute top-0 left-0 rounded-lg w-full h-full"
+        />
+        {isLoading ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
+            <Loader2 className="w-8 h-8 animate-spin text-white" />
+            <span className="ml-2 text-white text-sm sm:text-base">Loading AI model...</span>
+          </div>
+        ) : (
+          <div className="absolute bottom-4 right-4 flex gap-2">
+            <button
+              onClick={toggleCamera}
+              className="p-2 sm:p-3 bg-white rounded-full shadow-lg hover:bg-gray-100 transition-colors"
+            >
+              <FlipHorizontal className="w-5 h-5 sm:w-6 sm:h-6 text-gray-500" />
+            </button>
+            <button
+              onClick={toggleLiveMode}
+              className="p-2 sm:p-3 bg-white rounded-full shadow-lg hover:bg-gray-100 transition-colors"
+            >
+              {isLive ? (
+                <Pause className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500" />
+              ) : (
+                <Play className="w-5 h-5 sm:w-6 sm:h-6 text-green-500" />
+              )}
+            </button>
+            <button
+              onClick={captureImage}
+              className="p-2 sm:p-3 bg-white rounded-full shadow-lg hover:bg-gray-100 transition-colors"
+              disabled={!isLive}
+            >
+              <CaptureIcon className="w-5 h-5 sm:w-6 sm:h-6 text-red-500" />
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
