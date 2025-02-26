@@ -62,6 +62,23 @@ interface WasteDataWithId extends WasteData {
   id: string;
 }
 
+interface MeetingRequest {
+  itemId: string;
+  itemTitle: string;
+  ownerId: string;
+  requesterId: string;
+  requesterEmail: string;
+  meetingPoint: {
+    name: string;
+    type: string;
+    lat: number;
+    lng: number;
+    distance: number;
+  };
+  status: 'pending' | 'accepted' | 'rejected';
+  createdAt: string;
+}
+
 export const saveWasteData = async (items: DetectedItem[], userId: string) => {
   try {
     if (!userId) {
@@ -310,4 +327,8 @@ export const getUserLocation = (): Promise<Location> => {
       }
     );
   });
-}; 
+};
+
+export async function createMeetingRequest(request: MeetingRequest) {
+  return await addDoc(collection(db, 'meetingRequests'), request);
+} 

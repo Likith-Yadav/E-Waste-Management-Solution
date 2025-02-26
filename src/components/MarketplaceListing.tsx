@@ -3,7 +3,10 @@ import { useWasteStore } from '../store/wasteStore';
 import { convertToMarketplaceItem, getUserWasteData, getUserLocation } from '../services/firebaseService';
 import { Loader2, Check, MapPin } from 'lucide-react';
 import { useUser } from "@clerk/clerk-react";
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import { updateDoc } from 'firebase/firestore';
 
 type ListingType = 'give' | 'take';
 type Condition = 'new' | 'good' | 'fair' | 'poor';
@@ -40,6 +43,7 @@ interface DetectedItemWithDate extends DetectedItem {
 }
 
 export function MarketplaceListing() {
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useUser();
   const [userDetectedItems, setUserDetectedItems] = useState<DetectedItemWithDate[]>([]);
@@ -70,6 +74,8 @@ export function MarketplaceListing() {
     lng: 0,
     address: ''
   });
+  const [isEditing, setIsEditing] = useState(false);
+  const [isLoadingListing, setIsLoadingListing] = useState(false);
 
   useEffect(() => {
     const loadUserItems = async () => {
@@ -127,77 +133,113 @@ export function MarketplaceListing() {
     }
   }, []);
 
+  useEffect(() => {
+    const fetchListing = async () => {
+      if (!id) return; // Exit if no ID (create mode)
+      if (!user) {
+        navigate('/login'); // Redirect to login if no user
+        return;
+      }
+      
+      setIsLoadingListing(true);
+      try {
+        const listingRef = doc(db, 'marketplace', id);
+        const listingDoc = await getDoc(listingRef);
+        
+        if (!listingDoc.exists()) {
+          console.error('Listing not found');
+          navigate('/marketplace');
+          return;
+        }
+
+        const listingData = listingDoc.data();
+        
+        // Check if user owns this listing
+        if (listingData.userId !== user.id) {
+          console.error('Unauthorized access');
+          navigate('/marketplace');
+          return;
+        }
+
+        setIsEditing(true);
+        setListingInfo({
+          title: listingData.title || '',
+          condition: listingData.condition || 'good',
+          type: listingData.type || 'give',
+          price: listingData.price || 'free',
+          description: listingData.description || '',
+          location: listingData.location || {
+            lat: 0,
+            lng: 0,
+            address: ''
+          },
+          contact: listingData.contact || {
+            email: '',
+            phone: ''
+          },
+          category: listingData.category || ''
+        });
+      } catch (error) {
+        console.error('Error fetching listing:', error);
+        navigate('/marketplace');
+      } finally {
+        setIsLoadingListing(false);
+      }
+    };
+
+    fetchListing();
+  }, [id, user, navigate]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedItem || !user) return;
-
-    const item = userDetectedItems.find(i => i.type === selectedItem);
-    if (!item) return;
+    if (!user) {
+      navigate('/login');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
-      // Get current location first
-      if ("geolocation" in navigator) {
-        navigator.geolocation.getCurrentPosition(async (position) => {
-          try {
-            // Get address from coordinates using OpenStreetMap Nominatim
-            const response = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?lat=${position.coords.latitude}&lon=${position.coords.longitude}&format=json`
-            );
-            const data = await response.json();
-            
-            const location = {
-              lat: position.coords.latitude,
-              lng: position.coords.longitude,
-              address: data.display_name || ''
-            };
+      if (isEditing && id) {
+        // Update existing listing
+        const listingRef = doc(db, 'marketplace', id);
+        await updateDoc(listingRef, {
+          title: listingInfo.title,
+          condition: listingInfo.condition,
+          type: listingInfo.type,
+          price: listingInfo.price,
+          description: listingInfo.description,
+          location: listingInfo.location,
+          contact: listingInfo.contact,
+          updatedAt: new Date().toISOString()
+        });
+      } else {
+        // Create new listing
+        if (!selectedItem) {
+          throw new Error('No item selected');
+        }
 
-            console.log('Saving item with location:', location); // Debug log
+        const item = userDetectedItems.find(i => i.type === selectedItem);
+        if (!item) {
+          throw new Error('Selected item not found');
+        }
 
-            await convertToMarketplaceItem(item, {
-              title: listingInfo.title,
-              condition: listingInfo.condition,
-              type: listingInfo.type,
-              price: listingInfo.price,
-              description: listingInfo.description,
-              location: location,
-              contact: {
-                email: user.primaryEmailAddress?.emailAddress || listingInfo.contact.email,
-                phone: listingInfo.contact.phone
-              },
-              userId: user.id
-            });
-            
-            console.log('Listing created with location:', location);
-            // Show success message
-            setShowSuccess(true);
-            
-            // Reset form after 2 seconds
-            setTimeout(() => {
-              setSelectedItem(null);
-              setListingInfo({
-                title: '',
-                condition: 'good',
-                type: 'give',
-                price: 'free',
-                description: '',
-                location: {
-                  lat: 0,
-                  lng: 0,
-                  address: ''
-                },
-                contact: { email: '', phone: '' },
-                category: ''
-              });
-              setShowSuccess(false);
-            }, 2000);
-          } catch (error) {
-            console.error('Error getting location:', error);
+        await convertToMarketplaceItem(item, {
+          ...listingInfo,
+          userId: user.id,
+          contact: {
+            email: user.primaryEmailAddress?.emailAddress || listingInfo.contact.email,
+            phone: listingInfo.contact.phone
           }
         });
       }
+
+      setShowSuccess(true);
+      setTimeout(() => {
+        navigate('/marketplace');
+      }, 2000);
     } catch (error) {
-      console.error('Error creating listing:', error);
+      console.error('Error saving listing:', error);
+      // You might want to show an error message to the user here
     } finally {
       setIsSubmitting(false);
     }
@@ -237,9 +279,15 @@ export function MarketplaceListing() {
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-xl font-semibold mb-4">Create Marketplace Listing</h2>
+      <h2 className="text-xl font-semibold mb-4">
+        {isEditing ? 'Edit Marketplace Listing' : 'Create Marketplace Listing'}
+      </h2>
       
-      {showSuccess ? (
+      {isLoadingListing ? (
+        <div className="flex justify-center py-8">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        </div>
+      ) : showSuccess ? (
         <div className="flex items-center justify-center p-8 bg-green-50 rounded-lg">
           <div className="text-center">
             <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
@@ -278,34 +326,35 @@ export function MarketplaceListing() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Select Detected Item</label>
-            <select
-              required
-              value={selectedItem || ''}
-              onChange={(e) => {
-                setSelectedItem(e.target.value);
-                const item = userDetectedItems.find(i => i.type === e.target.value);
-                if (item) {
-                  setListingInfo(prev => ({
-                    ...prev,
-                    title: `${item.type} for ${prev.type === 'give' ? 'giving away' : 'taking'}`,
-                    category: item.category
-                  }));
-                }
-              }}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            >
-              <option value="">Select an item</option>
-              {userDetectedItems.map((item, index) => (
-                <option key={index} value={item.type}>
-                  {item.type} - Detected on {item.detectedAt.toLocaleDateString()}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!isEditing && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Select Detected Item</label>
+              <select
+                required
+                value={selectedItem || ''}
+                onChange={(e) => {
+                  setSelectedItem(e.target.value);
+                  const item = userDetectedItems.find(i => i.type === e.target.value);
+                  if (item) {
+                    setListingInfo(prev => ({
+                      ...prev,
+                      title: `${item.type} for ${prev.type === 'give' ? 'giving away' : 'taking'}`,
+                      category: item.category
+                    }));
+                  }
+                }}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              >
+                <option value="">Select an item</option>
+                {userDetectedItems.map((item, index) => (
+                  <option key={index} value={item.type}>
+                    {item.type} - Detected on {item.detectedAt.toLocaleDateString()}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
-          {/* Group detected items by category */}
           <div className="grid grid-cols-2 gap-4 mt-4">
             {Object.entries(
               userDetectedItems.reduce((acc, item) => {
@@ -391,17 +440,20 @@ export function MarketplaceListing() {
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
             >
               <option value="free">Free</option>
-              <option value="paid">Paid</option>
+              <option value="paid">Paid (₹)</option>
             </select>
             {listingInfo.price !== 'free' && (
-              <input
-                type="number"
-                min="0"
-                value={typeof listingInfo.price === 'number' ? listingInfo.price : ''}
-                onChange={handlePriceValueChange}
-                className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder="Enter price"
-              />
+              <div className="mt-2 relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₹</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={typeof listingInfo.price === 'number' ? listingInfo.price : ''}
+                  onChange={handlePriceValueChange}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 pl-8"
+                  placeholder="Enter price in Rupees"
+                />
+              </div>
             )}
           </div>
 
@@ -477,10 +529,10 @@ export function MarketplaceListing() {
             {isSubmitting ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                Creating...
+                {isEditing ? 'Updating...' : 'Creating...'}
               </>
             ) : (
-              'Create Listing'
+              isEditing ? 'Update Listing' : 'Create Listing'
             )}
           </button>
         </form>

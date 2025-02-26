@@ -7,6 +7,7 @@ import { UserProfile } from './components/UserProfile';
 import { SignIn } from './components/SignIn';
 import { SignUp } from './components/SignUp';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { MarketplaceListing } from './components/MarketplaceListing';
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -22,6 +23,8 @@ export function App() {
             <Route path="/detection" element={<ProtectedRoute><WasteDetection /></ProtectedRoute>} />
             <Route path="/marketplace" element={<ProtectedRoute><MarketplacePage /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
+            <Route path="/marketplace/create" element={<MarketplaceListing />} />
+            <Route path="/marketplace/edit/:id" element={<MarketplaceListing />} />
           </Routes>
         </Router>
       </AuthProvider>

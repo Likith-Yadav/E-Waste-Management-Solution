@@ -439,9 +439,9 @@ export function MarketplaceItems() {
             >
               <option value="">All Prices</option>
               <option value="free">Free</option>
-              <option value="under50">Under $50</option>
-              <option value="50to100">$50 - $100</option>
-              <option value="over100">Over $100</option>
+              <option value="under50">Under ₹50</option>
+              <option value="50to100">₹50 - ₹100</option>
+              <option value="over100">Over ₹100</option>
             </select>
 
             <select
@@ -503,7 +503,7 @@ export function MarketplaceItems() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm text-gray-500">
                     <Tag className="w-4 h-4" />
-                    <span>{item.price === 'free' ? 'Free' : `$${item.price}`}</span>
+                    <span>{item.price === 'free' ? 'Free' : `₹${item.price}`}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm text-gray-500">
                     <MapPin className="w-4 h-4" />

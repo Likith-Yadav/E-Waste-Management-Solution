@@ -12,6 +12,7 @@
   "dependencies": {
     "@clerk/clerk-react": "^5.23.0",
     "@google/generative-ai": "^0.2.1",
+    "@headlessui/react": "^2.2.0",
     "@react-google-maps/api": "^2.20.6",
     "@tensorflow-models/coco-ssd": "^2.2.3",
     "@tensorflow/tfjs": "^4.17.0",
