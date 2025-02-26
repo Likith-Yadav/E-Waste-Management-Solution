@@ -1,60 +1,68 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 export async function getRecyclingAdvice(prompt: string, detectedItems: string[] = []) {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    if (!GEMINI_API_KEY) {
+      throw new Error('Gemini API key is not configured');
+    }
 
-    const systemPrompt = `
-You are analyzing these items: ${detectedItems.join(', ')}
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' }); // Assuming this worked for you
 
-IMPORTANT: Write your response in plain text only. Do not use any special characters, asterisks, bullet points, dashes, or markdown formatting.
+    const fullPrompt = `You are a helpful recycling assistant. Analyze the following items detected in an image and provide practical advice.
+      ${detectedItems.length > 0 ? `\nDetected Items: ${detectedItems.join(', ')}` : 'No items detected.'}
+      \nUser Question: ${prompt}
+      \nProvide clear, actionable recycling or disposal advice for the detected items in plain text. Do not use Markdown (e.g., **, *, #), special characters, or formatting—return only plain text.`;
 
-Write your response in these sections using plain text and numbers only:
-
-ITEM ANALYSIS
-List the detected items and their materials on separate lines.
-
-HANDLING INSTRUCTIONS
-Write numbered steps for handling each item.
-
-DISPOSAL METHODS
-Write the disposal methods for each item on separate lines.
-
-ENVIRONMENTAL IMPACT
-Write a brief paragraph about environmental impact.
-
-LOCAL RESOURCES
-Write relevant facilities and programs on separate lines.
-
-Question: ${prompt}
-
-Remember: Use only plain text. No special formatting characters like asterisks, dashes, or bullet points. Use numbers for steps and line breaks for separation.`;
-
+    console.log('Sending request to Gemini with prompt:', fullPrompt);
     const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: systemPrompt }]}],
+      contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
       generationConfig: {
         temperature: 0.7,
         topK: 40,
         topP: 0.8,
         maxOutputTokens: 1000,
-      }
+      },
     });
-    
+
     const response = await result.response;
-    return response.text().replace(/[\*\-\•]/g, ''); // Remove any remaining special characters
-  } catch (error) {
+    console.log('Gemini response:', response.text());
+    return response.text();
+  } catch (error: any) {
     console.error('Error getting recycling advice:', error);
-    return 'Sorry, I could not generate recycling advice at this time.';
+    if (error.message?.includes('API key not found')) {
+      return 'Invalid API key. Please check your configuration.';
+    }
+    if (error.message?.includes('API not enabled')) {
+      return 'Please enable the Gemini API in your Google Cloud Console and ensure billing is set up.';
+    }
+    if (error.message?.includes('models/')) {
+      console.error('Model not found. Attempting to list available models...');
+      await listAvailableModels();
+      return 'The requested model is not available. Please try again later or check the console for available models.';
+    }
+    return 'Unable to connect to AI service. Please try again later.';
+  }
+}
+
+async function listAvailableModels() {
+  try {
+    const response = await fetch(
+      'https://generativelanguage.googleapis.com/v1/models?key=' + GEMINI_API_KEY,
+      { method: 'GET' }
+    );
+    const data = await response.json();
+    console.log('Available models:', data.models);
+  } catch (error) {
+    console.error('Error listing models:', error);
   }
 }
 
 export async function analyzeWasteHabits(items: Array<{ type: string; timestamp: number }>) {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-
-    // Analyze waste patterns
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
     const itemCounts = items.reduce((acc, item) => {
       acc[item.type] = (acc[item.type] || 0) + 1;
       return acc;
@@ -75,7 +83,7 @@ Provide analysis in this format:
 4. Sustainable Alternatives
 5. Action Items
 
-Focus on practical, achievable suggestions for reducing waste and improving recycling habits.`;
+Focus on practical, achievable suggestions for reducing waste and improving recycling habits. Return the response in plain text without Markdown (e.g., **, *, #) or special characters.`;
 
     const result = await model.generateContent(analysisPrompt);
     const response = await result.response;
@@ -88,8 +96,7 @@ Focus on practical, achievable suggestions for reducing waste and improving recy
 
 export async function getDisposalGuide(itemType: string) {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
     const guidePrompt = `
 Provide a professional disposal guide for: ${itemType}
 
@@ -117,4 +124,4 @@ Format the response in clear sections without any markdown or special characters
     console.error('Error getting disposal guide:', error);
     return 'Unable to generate disposal guide at this time.';
   }
-} 
+}

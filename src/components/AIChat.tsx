@@ -16,26 +16,47 @@ export function AIChat() {
   const detectedItems = useWasteStore((state) => state.detectedItems);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  // Add initial message based on detected items
+  // Initial message based on detected items
   useEffect(() => {
     if (detectedItems.length > 0) {
-      const items = detectedItems.map(item => item.type);
-      getRecyclingAdvice("What items do you see and how should I handle them?", items)
-        .then(response => {
-          setMessages([{ 
-            text: response,
-            isUser: false 
-          }]);
-        });
+      const items = detectedItems.map((item) => item.type);
+      setIsLoading(true);
+      const timer = setTimeout(() => {
+        getRecyclingAdvice(
+          'I just captured an image. What items do you see and how should I handle them?',
+          items
+        )
+          .then((response) => {
+            setMessages([{ text: response, isUser: false }]);
+            setIsLoading(false);
+          })
+          .catch(() => {
+            setMessages([
+              {
+                text: 'Sorry, I couldn’t analyze the image. Please try again!',
+                isUser: false,
+              },
+            ]);
+            setIsLoading(false);
+          });
+      }, 500); // Debounce to collect all detections
+      return () => clearTimeout(timer);
+    } else if (detectedItems.length === 0 && messages.length === 0) {
+      setMessages([
+        {
+          text: 'No items detected yet. Capture an image or ask me a question!',
+          isUser: false,
+        },
+      ]);
     }
-  }, [detectedItems]); // Update when new items are detected
+  }, [detectedItems]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,26 +64,26 @@ export function AIChat() {
 
     const userMessage = input.trim();
     setInput('');
-    setMessages(prev => [...prev, { text: userMessage, isUser: true }]);
+    setMessages((prev) => [...prev, { text: userMessage, isUser: true }]);
     setIsLoading(true);
 
     try {
-      // Get current detected items for context
-      const currentItems = detectedItems.map(item => item.type);
-      // Pass both the user's question and current detected items
+      const currentItems = detectedItems.map((item) => item.type);
       const response = await getRecyclingAdvice(
-        `Based on the detected items (${currentItems.join(', ')}): ${userMessage}`,
+        `Based on the captured image (${currentItems.join(', ')}): ${userMessage}`,
         currentItems
       );
-      setMessages(prev => [...prev, { text: response, isUser: false }]);
+      setMessages((prev) => [...prev, { text: response, isUser: false }]);
     } catch (error) {
       console.error('Error getting AI response:', error);
-      setMessages(prev => [...prev, { 
-        text: "Sorry, I couldn't process your request. Please try again.", 
-        isUser: false 
-      }]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          text: 'Oops! Something went wrong. Please try again.',
+          isUser: false,
+        },
+      ]);
     }
-
     setIsLoading(false);
   };
 
@@ -105,7 +126,7 @@ export function AIChat() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about The Object..."
+          placeholder="Ask about the object..."
           className="flex-1 px-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <button
