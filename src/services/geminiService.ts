@@ -1,6 +1,8 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+console.log('Loaded API Key:', GEMINI_API_KEY); // Confirm key is loaded
+
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 export async function getRecyclingAdvice(prompt: string, detectedItems: string[] = []) {
@@ -9,7 +11,7 @@ export async function getRecyclingAdvice(prompt: string, detectedItems: string[]
       throw new Error('Gemini API key is not configured');
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' }); // Assuming this worked for you
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
 
     const fullPrompt = `You are a helpful recycling assistant. Analyze the following items detected in an image and provide practical advice.
       ${detectedItems.length > 0 ? `\nDetected Items: ${detectedItems.join(', ')}` : 'No items detected.'}
@@ -32,16 +34,11 @@ export async function getRecyclingAdvice(prompt: string, detectedItems: string[]
     return response.text();
   } catch (error: any) {
     console.error('Error getting recycling advice:', error);
-    if (error.message?.includes('API key not found')) {
-      return 'Invalid API key. Please check your configuration.';
+    if (error.message?.includes('API_KEY_INVALID')) {
+      return 'Invalid API key. Please check your configuration in Google Cloud Console.';
     }
     if (error.message?.includes('API not enabled')) {
-      return 'Please enable the Gemini API in your Google Cloud Console and ensure billing is set up.';
-    }
-    if (error.message?.includes('models/')) {
-      console.error('Model not found. Attempting to list available models...');
-      await listAvailableModels();
-      return 'The requested model is not available. Please try again later or check the console for available models.';
+      return 'Please enable the Generative Language API in your Google Cloud Console and ensure billing is set up.';
     }
     return 'Unable to connect to AI service. Please try again later.';
   }
@@ -54,7 +51,7 @@ async function listAvailableModels() {
       { method: 'GET' }
     );
     const data = await response.json();
-    console.log('Available models:', data.models);
+    console.log('Available models:', data.models || data);
   } catch (error) {
     console.error('Error listing models:', error);
   }
